@@ -299,6 +299,15 @@ type Network struct {
 	Priorities []InterfacePriority `json:"priorities,omitempty"`
 }
 
+// Intel RDT: Intel Xeon platforms shared resource control
+type IntelRdt struct {
+	// The schema for L3 cache id and capacity bitmask (CBM)
+	// Format: "L3:<cache_id0>=<cbm0>;<cache_id1>=<cbm1>;..."
+	L3CacheSchema *string `json:"l3CacheSchema,omitempty"`
+	// The bitmask of the CPUs that are bound to the schema
+	L3CacheCpus *string `json:"l3CacheCpus,omitempty"`
+}
+
 // Resources has container runtime resource constraints
 type Resources struct {
 	// Devices are a list of device rules for the whitelist controller
@@ -319,6 +328,8 @@ type Resources struct {
 	HugepageLimits []HugepageLimit `json:"hugepageLimits,omitempty"`
 	// Network restriction configuration
 	Network *Network `json:"network,omitempty"`
+	// IntelRdt restriction configuration
+	IntelRdt *IntelRdt `json:"intelRdt,omitempty"`
 }
 
 // Device represents the mknod information for a Linux special device file
