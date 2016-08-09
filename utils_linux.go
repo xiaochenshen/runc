@@ -38,6 +38,11 @@ func loadFactory(context *cli.Context) (libcontainer.Factory, error) {
 			return nil, fmt.Errorf("systemd cgroup flag passed, but systemd support for managing cgroups is not available")
 		}
 	}
+	intelRdtManager := libcontainer.IntelRdtFs
+	if intelRdtManager != nil {
+		return libcontainer.New(abs, cgroupManager, intelRdtManager, libcontainer.CriuPath(context.GlobalString("criu")))
+	}
+
 	return libcontainer.New(abs, cgroupManager, libcontainer.CriuPath(context.GlobalString("criu")))
 }
 
