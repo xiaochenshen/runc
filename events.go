@@ -12,6 +12,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/opencontainers/runc/libcontainer"
 	"github.com/opencontainers/runc/libcontainer/cgroups"
+	"github.com/opencontainers/runc/libcontainer/intelrdt"
 	"github.com/urfave/cli"
 )
 
@@ -24,11 +25,12 @@ type event struct {
 
 // stats is the runc specific stats structure for stability when encoding and decoding stats.
 type stats struct {
-	Cpu     cpu                `json:"cpu"`
-	Memory  memory             `json:"memory"`
-	Pids    pids               `json:"pids"`
-	Blkio   blkio              `json:"blkio"`
-	Hugetlb map[string]hugetlb `json:"hugetlb"`
+	Cpu      cpu                `json:"cpu"`
+	Memory   memory             `json:"memory"`
+	Pids     pids               `json:"pids"`
+	Blkio    blkio              `json:"blkio"`
+	Hugetlb  map[string]hugetlb `json:"hugetlb"`
+	IntelRdt intelRdt           `jsaon:"intelRdt"`
 }
 
 type hugetlb struct {
@@ -93,6 +95,26 @@ type memory struct {
 	Kernel    memoryEntry       `json:"kernel,omitempty"`
 	KernelTCP memoryEntry       `json:"kernelTCP,omitempty"`
 	Raw       map[string]uint64 `json:"raw,omitempty"`
+}
+
+// The read-only stats in root of Intel RDT "resource control" filesystem
+type intelRdtRoot struct {
+	Info              string `json:"info,omitempty"`
+	DomainToCacheId   string `json:"domainToCacheId,omitempty"`
+	MaxCbmLen         uint64 `json:"maxCbmLen,omitempty"`
+	MaxClosid         uint64 `json:"maxClosid,omitempty"`
+	RootL3CacheSchema string `json:"rootL3CacheSchema,omitempty"`
+	RootL3CacheCpus   string `json:"rootL3CacheCpus,omitempty"`
+}
+
+type intelRdtSub struct {
+	L3CacheSchema string `json:"l3CacheSchema,omitempty"`
+	L3CacheCpus   string `json:"l3CacheCpus,omitempty"`
+}
+
+type intelRdt struct {
+	IntelRdtRoot intelRdtRoot `json:"intelRdtRoot,omitempty"`
+	IntelRdtSub  intelRdtSub  `json:"intelRdtSub,omitempty"`
 }
 
 var eventsCommand = cli.Command{
@@ -224,6 +246,15 @@ func convertLibcontainerStats(ls *libcontainer.Stats) *stats {
 	for k, v := range cg.HugetlbStats {
 		s.Hugetlb[k] = convertHugtlb(v)
 	}
+
+	is := ls.IntelRdtStats
+	if is == nil {
+		return nil
+	}
+
+	s.IntelRdt.IntelRdtRoot = convertIntelRdtRoot(is.IntelRdtRootStats)
+	s.IntelRdt.IntelRdtSub = convertIntelRdtSub(is.IntelRdtSubStats)
+
 	return &s
 }
 
@@ -255,4 +286,22 @@ func convertBlkioEntry(c []cgroups.BlkioStatEntry) []blkioEntry {
 		})
 	}
 	return out
+}
+
+func convertIntelRdtRoot(i intelrdt.IntelRdtRootStats) intelRdtRoot {
+	return intelRdtRoot{
+		Info:              i.Info,
+		DomainToCacheId:   i.DomainToCacheId,
+		MaxCbmLen:         i.MaxCbmLen,
+		MaxClosid:         i.MaxClosid,
+		RootL3CacheSchema: i.RootL3CacheSchema,
+		RootL3CacheCpus:   i.RootL3CacheCpus,
+	}
+}
+
+func convertIntelRdtSub(i intelrdt.IntelRdtSubStats) intelRdtSub {
+	return intelRdtSub{
+		L3CacheSchema: i.L3CacheSchema,
+		L3CacheCpus:   i.L3CacheCpus,
+	}
 }

@@ -446,6 +446,14 @@ func createCgroupConfig(name string, useSystemdCgroup bool, spec *specs.Spec) (*
 			})
 		}
 	}
+	if r.IntelRdt != nil {
+		if r.IntelRdt.L3CacheSchema != nil {
+			c.Resources.IntelRdtL3CacheSchema = *r.IntelRdt.L3CacheSchema
+		}
+		if r.IntelRdt.L3CacheCpus != nil {
+			c.Resources.IntelRdtL3CacheCpus = *r.IntelRdt.L3CacheCpus
+		}
+	}
 	return c, nil
 }
 

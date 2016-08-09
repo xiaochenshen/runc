@@ -22,6 +22,7 @@ import (
 	"github.com/opencontainers/runc/libcontainer/cgroups"
 	"github.com/opencontainers/runc/libcontainer/configs"
 	"github.com/opencontainers/runc/libcontainer/criurpc"
+	"github.com/opencontainers/runc/libcontainer/intelrdt"
 	"github.com/opencontainers/runc/libcontainer/system"
 	"github.com/opencontainers/runc/libcontainer/utils"
 	"github.com/syndtr/gocapability/capability"
@@ -35,6 +36,7 @@ type linuxContainer struct {
 	root                 string
 	config               *configs.Config
 	cgroupManager        cgroups.Manager
+	intelRdtManager      intelrdt.Manager
 	initPath             string
 	initArgs             []string
 	initProcess          parentProcess
@@ -62,6 +64,9 @@ type State struct {
 
 	// Container's standard descriptors (std{in,out,err}), needed for checkpoint and restore
 	ExternalDescriptors []string `json:"external_descriptors,omitempty"`
+
+	// Intel RDT "resource control" filesystem path
+	IntelRdtPath string `json:"intel_rdt_path"`
 }
 
 // Container is a libcontainer container object.
@@ -156,6 +161,11 @@ func (c *linuxContainer) Stats() (*Stats, error) {
 	if stats.CgroupStats, err = c.cgroupManager.GetStats(); err != nil {
 		return stats, newSystemErrorWithCause(err, "getting container stats from cgroups")
 	}
+	if c.intelRdtManager != nil {
+		if stats.IntelRdtStats, err = c.intelRdtManager.GetStats(); err != nil {
+			return stats, newSystemErrorWithCause(err, "getting container's Intel RDT stats")
+		}
+	}
 	for _, iface := range c.config.Networks {
 		switch iface.Type {
 		case "veth":
@@ -180,7 +190,15 @@ func (c *linuxContainer) Set(config configs.Config) error {
 		return newGenericError(fmt.Errorf("container not running"), ContainerNotRunning)
 	}
 	c.config = &config
-	return c.cgroupManager.Set(c.config)
+	if err := c.cgroupManager.Set(c.config); err != nil {
+		return err
+	}
+	if c.intelRdtManager != nil {
+		if err := c.intelRdtManager.Set(c.config); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (c *linuxContainer) Start(process *Process) error {
@@ -346,16 +364,17 @@ func (c *linuxContainer) newInitProcess(p *Process, cmd *exec.Cmd, parentPipe, c
 		return nil, err
 	}
 	return &initProcess{
-		cmd:           cmd,
-		childPipe:     childPipe,
-		parentPipe:    parentPipe,
-		manager:       c.cgroupManager,
-		config:        c.newInitConfig(p),
-		container:     c,
-		process:       p,
-		bootstrapData: data,
-		sharePidns:    sharePidns,
-		rootDir:       rootDir,
+		cmd:             cmd,
+		childPipe:       childPipe,
+		parentPipe:      parentPipe,
+		manager:         c.cgroupManager,
+		intelRdtManager: c.intelRdtManager,
+		config:          c.newInitConfig(p),
+		container:       c,
+		process:         p,
+		bootstrapData:   data,
+		sharePidns:      sharePidns,
+		rootDir:         rootDir,
 	}, nil
 }
 
@@ -371,10 +390,15 @@ func (c *linuxContainer) newSetnsProcess(p *Process, cmd *exec.Cmd, parentPipe, 
 	if err != nil {
 		return nil, err
 	}
+	intelRdtPath := ""
+	if c.intelRdtManager != nil {
+		intelRdtPath = c.intelRdtManager.GetPath()
+	}
 	// TODO: set on container for process management
 	return &setnsProcess{
 		cmd:           cmd,
 		cgroupPaths:   c.cgroupManager.GetPaths(),
+		intelRdtPath:  intelRdtPath,
 		childPipe:     childPipe,
 		parentPipe:    parentPipe,
 		config:        c.newInitConfig(p),
@@ -1190,6 +1214,10 @@ func (c *linuxContainer) currentState() (*State, error) {
 		startTime, _ = c.initProcess.startTime()
 		externalDescriptors = c.initProcess.externalDescriptors()
 	}
+	IntelRdtPath := ""
+	if c.intelRdtManager != nil {
+		IntelRdtPath = c.intelRdtManager.GetPath()
+	}
 	state := &State{
 		BaseState: BaseState{
 			ID:                   c.ID(),
@@ -1201,6 +1229,7 @@ func (c *linuxContainer) currentState() (*State, error) {
 		CgroupPaths:         c.cgroupManager.GetPaths(),
 		NamespacePaths:      make(map[configs.NamespaceType]string),
 		ExternalDescriptors: externalDescriptors,
+		IntelRdtPath:        IntelRdtPath,
 	}
 	if pid > 0 {
 		for _, ns := range c.config.Namespaces {
