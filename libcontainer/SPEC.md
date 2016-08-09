@@ -154,6 +154,84 @@ that no processes or threads escape the cgroups.  This sync is
 done via a pipe ( specified in the runtime section below ) that the container's
 init process will block waiting for the parent to finish setup.
 
+**intelRdt**:  
+intelRdt is used to handle L3 cache resource allocation for containers with
+Intel RDT/CAT in Intel Xeon platforms.
+
+Intel Cache Allocation Technology (CAT) is a sub-feature of Resource Director
+Technology (RDT), which currently supports L3 cache resource allocation.
+
+In Linux kernel, it is exposed via "resource control" filesystem, which is a
+"cgroup-like" interface.
+
+Comparing with cgroups, intelRdt has similar process management lifecycle and
+interfaces in a container. But unlike cgroups' hierarchy, it has single level
+filesystem layout. When intelRdt is joined, the statistics can be collected
+from a container.
+
+Intel RDT "resource control" filesystem hierarchy:
+```
+mount -t resctrl resctrl /sys/fs/resctrl
+tree /sys/fs/resctrl
+/sys/fs/resctrl/
+|-- info
+|   |-- L3
+|       |-- cbm_mask
+|       |-- num_closids
+|-- cpus
+|-- schemata
+|-- tasks
+|-- <container_id>
+    |-- cpus
+    |-- schemata
+    |-- tasks
+
+```
+
+For runc, we can make use of `tasks` and `schemata` configuration for L3 cache
+resource constraints.
+
+ The file `tasks` has a list of tasks that belongs to this group (e.g.,
+<container_id>" group). Tasks can be added to a group by writing the task ID
+to the "tasks" file  (which will automatically remove them from the previous
+group to which they belonged). New tasks created by fork(2) and clone(2) are
+added to the same group as their parent. If a pid is not in any sub group, it
+is in root group.
+
+The file `schemata` has allocation masks/values for L3 cache on each socket,
+which contains L3 cache id and capacity bitmask (CBM).
+```
+	Format: "L3:<cache_id0>=<cbm0>;<cache_id1>=<cbm1>;..."
+```
+For example, on a two-socket machine, L3's schema line could be `L3:0=ff;1=c0`
+Which means L3 cache id 0's CBM is 0xff, and L3 cache id 1's CBM is 0xc0.
+
+The valid L3 cache CBM is a *contiguous bits set* and number of bits that can
+be set is less than the max bit. The max bits in the CBM is varied among
+supported Intel Xeon platforms. In Intel RDT "resource control" filesystem
+layout, the CBM in a group should be a subset of the CBM in root. Kernel will
+check if it is valid when writing. e.g., 0xfffff in root indicates the max bits
+of CBM is 20 bits, which mapping to entire L3 cache capacity. Some valid CBM
+values to set in a group: 0xf, 0xf0, 0x3ff, 0x1f00 and etc.
+
+For more information about Intel RDT/CAT kernel interface:  
+https://git.kernel.org/cgit/linux/kernel/git/tip/tip.git/commit/?h=x86/cache&id=f20e57892806ad244eaec7a7ae365e78fee53377
+
+An example for runc:
+```
+There are two L3 caches in the two-socket machine, the default CBM is 0xfffff
+and the max CBM length is 20 bits. This configuration assigns 4/5 of L3 cache
+id 0 and the whole L3 cache id 1 for the container:
+
+"linux": {
+	"resources": {
+		"intelRdt": {
+			"l3CacheSchema": "L3:0=ffff0;1=fffff"
+		}
+	}
+}
+```
+
 ### Security 
 
 The standard set of Linux capabilities that are set in a container
