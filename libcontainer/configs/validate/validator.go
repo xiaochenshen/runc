@@ -159,11 +159,18 @@ func (v *ConfigValidator) sysctl(config *configs.Config) error {
 
 func (v *ConfigValidator) intelrdt(config *configs.Config) error {
 	if config.IntelRdt != nil {
-		if !intelrdt.IsEnabled() {
+		if !intelrdt.IsCatEnabled() && !intelrdt.IsMbaEnabled() {
 			return fmt.Errorf("intelRdt is specified in config, but Intel RDT feature is not supported or enabled")
 		}
-		if config.IntelRdt.L3CacheSchema == "" {
-			return fmt.Errorf("intelRdt is specified in config, but intelRdt.l3CacheSchema is empty")
+		if intelrdt.IsCatEnabled() && !intelrdt.IsMbaEnabled() {
+			if config.IntelRdt.L3CacheSchema == "" {
+				return fmt.Errorf("Intel RDT/CAT is enabled and intelRdt is specified in config, but l3CacheSchema is empty")
+			}
+		}
+		if !intelrdt.IsCatEnabled() && intelrdt.IsMbaEnabled() {
+			if config.IntelRdt.MemBwSchema == nil {
+				return fmt.Errorf("Intel RDT/MBA is enabled and intelRdt is specified in config, but memBwSchema is empty")
+			}
 		}
 	}
 

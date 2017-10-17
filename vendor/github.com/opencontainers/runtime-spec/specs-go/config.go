@@ -158,8 +158,8 @@ type Linux struct {
 	ReadonlyPaths []string `json:"readonlyPaths,omitempty"`
 	// MountLabel specifies the selinux context for the mounts in the container.
 	MountLabel string `json:"mountLabel,omitempty"`
-	// IntelRdt contains Intel Resource Director Technology (RDT) information
-	// for handling resource constraints (e.g., L3 cache) for the container
+	// IntelRdt contains Intel Resource Director Technology (RDT) information for
+	// handling resource constraints (e.g., L3 cache, memory bandwidth) for the container
 	IntelRdt *LinuxIntelRdt `json:"intelRdt,omitempty"`
 }
 
@@ -561,10 +561,20 @@ type LinuxSyscall struct {
 	Args   []LinuxSeccompArg  `json:"args,omitempty"`
 }
 
-// LinuxIntelRdt has container runtime resource constraints
-// for Intel RDT/CAT which introduced in Linux 4.10 kernel
+// LinuxMemBwSchema specifies memory bandwidth (b/w) percentage per L3 cache id
+type LinuxMemBwSchema struct {
+	CacheId      uint32 `json:"cacheId"`
+	BwPercentage uint32 `json:"bwPercentage"`
+}
+
+// LinuxIntelRdt has container runtime resource constraints for Intel RDT
+// CAT and MBA features which introduced in Linux 4.10 and 4.12 kernel
 type LinuxIntelRdt struct {
 	// The schema for L3 cache id and capacity bitmask (CBM)
 	// Format: "L3:<cache_id0>=<cbm0>;<cache_id1>=<cbm1>;..."
 	L3CacheSchema string `json:"l3CacheSchema,omitempty"`
+
+	// The schema of memory bandwidth (b/w) percentage per L3 cache id
+	// Format: "MB:<cache_id0>=bandwidth0;<cache_id1>=bandwidth1;..."
+	MemBwSchema []LinuxMemBwSchema `json:"memBwSchema,omitempty"`
 }

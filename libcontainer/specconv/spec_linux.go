@@ -258,6 +258,12 @@ func CreateLibcontainerConfig(opts *CreateOpts) (*configs.Config, error) {
 		if spec.Linux.IntelRdt.L3CacheSchema != "" {
 			config.IntelRdt.L3CacheSchema = spec.Linux.IntelRdt.L3CacheSchema
 		}
+		for _, m := range spec.Linux.IntelRdt.MemBwSchema {
+			config.IntelRdt.MemBwSchema = append(config.IntelRdt.MemBwSchema, &configs.MemBwSchema{
+				CacheId:      m.CacheId,
+				BwPercentage: m.BwPercentage,
+			})
+		}
 	}
 	return config, nil
 }
